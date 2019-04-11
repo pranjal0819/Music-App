@@ -7,7 +7,7 @@ class Songs(models.Model):
     # id automatic generated in django
     title = models.CharField(max_length=200)
     url = models.URLField()
-    duration = models.CharField(max_length=20)
+    duration = models.TimeField()
 
     def __str__(self):
         return self.title

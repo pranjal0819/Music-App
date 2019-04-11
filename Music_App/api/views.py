@@ -1,3 +1,4 @@
+from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -61,8 +62,8 @@ class AddSongToPlayListView(APIView):
                 dictionaries = [obj.as_dict()]
                 return Response(dictionaries)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        except TypeError:
-            return Response(status=status.HTTP_400_BAD_REQUEST)
+        except ObjectDoesNotExist:
+            return Response('Invalid Primary Key', status=status.HTTP_400_BAD_REQUEST)
 
 
 class ScheduleView(APIView):
