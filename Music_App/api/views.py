@@ -1,11 +1,14 @@
+import pytz
+from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Songs, PlayList, Schedule
+from .models import Songs, PlayList, Schedule, UserTimeZone
 from .serializers import SongSerializer, PlayListSerializer, SongsPlaylistSerializer, ScheduleSerializer
+from .serializers import UserTimeZoneSerializer
 
 
 # Create your views here.
@@ -27,6 +30,39 @@ class SongView(APIView):
     #     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+class TimeZoneView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        try:
+            UserTimeZone.objects.get(user=request.user)
+            return Response("Timezone Already set", status=status.HTTP_400_BAD_REQUEST)
+        except ObjectDoesNotExist:
+            data = request.data['time_zone']
+            if data in pytz.all_timezones_set:
+                obj = UserTimeZone.objects.create(time_zone=data, user=request.user)
+                serializer = UserTimeZoneSerializer(obj)
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            return Response("Invalid Timezone", status=status.HTTP_400_BAD_REQUEST)
+        except Exception:
+            return Response("Provide Timezone", status=status.HTTP_400_BAD_REQUEST)
+
+    def patch(self, request):
+        try:
+            data = request.data['time_zone']
+            if data in pytz.all_timezones_set:
+                obj = UserTimeZone.objects.get(user=request.user)
+                obj.time_zone = data
+                obj.save(update_fields=['time_zone'])
+                serializer = UserTimeZoneSerializer(obj)
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            return Response("Invalid Timezone", status=status.HTTP_400_BAD_REQUEST)
+        except ObjectDoesNotExist:
+            return Response("Timezone not Created", status=status.HTTP_400_BAD_REQUEST)
+        except Exception:
+            return Response("Provide Timezone", status=status.HTTP_400_BAD_REQUEST)
+
+
 class CreatePlayListView(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -45,7 +81,7 @@ class SongPlayListsView(APIView):
     def get(self, request):
         obj_list = PlayList.objects.filter(fk_user=request.user)
         dictionaries = [obj.as_dict() for obj in obj_list]
-        return Response(dictionaries)
+        return Response(dictionaries, status=status.HTTP_200_OK)
 
 
 # noinspection PyBroadException
@@ -70,13 +106,28 @@ class ScheduleView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def get(self, request):
+        try:
+            obj = UserTimeZone.objects.get(user=request.user)
+            time_zone = obj.time_zone
+        except ObjectDoesNotExist:
+            time_zone = settings.TIME_ZONE
+        zone = pytz.timezone(time_zone)
         data_list = Schedule.objects.filter(fk_user=request.user)
-        serializer = ScheduleSerializer(data_list, many=True)
-        return Response(serializer.data)
+        my_obj_list = []
+        for obj in data_list:
+            my_obj_list.append({
+                "fk_playlist": obj.fk_playlist.playlist_name,
+                "scheduled_time": obj.scheduled_time.astimezone(zone)
+            })
+        return Response(my_obj_list, status=status.HTTP_200_OK)
 
     def post(self, request):
-        serializer = ScheduleSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save(fk_user=request.user)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            serializer = ScheduleSerializer(data=request.data)
+            if serializer.is_valid():
+                PlayList.objects.get(id=request.data['fk_playlist'], fk_user=request.user)
+                serializer.save(fk_user=request.user)
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except ObjectDoesNotExist:
+            return Response("Forbidden",status.HTTP_403_FORBIDDEN)

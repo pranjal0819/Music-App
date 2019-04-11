@@ -1,12 +1,18 @@
 from rest_framework import serializers
 
-from .models import Songs, SongsPlaylist, PlayList, Schedule
+from .models import Songs, SongsPlaylist, PlayList, Schedule, UserTimeZone
 
 
 class SongSerializer(serializers.ModelSerializer):
     class Meta:
         model = Songs
         fields = '__all__'
+
+
+class UserTimeZoneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserTimeZone
+        fields = ('time_zone',)
 
 
 class PlayListSerializer(serializers.ModelSerializer):

@@ -3,6 +3,14 @@ from django.contrib.auth.models import User
 
 
 # Create your models here.
+class UserTimeZone(models.Model):
+    time_zone = models.CharField(max_length=30, default='UTC')
+    user = models.OneToOneField(User, unique=True, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.user.username
+
+
 class Songs(models.Model):
     # id automatic generated in django
     title = models.CharField(max_length=200)
@@ -52,4 +60,4 @@ class Schedule(models.Model):
     scheduled_time = models.DateTimeField()
 
     def __str__(self):
-        return self.scheduled_time
+        return str(self.fk_user) + ' - ' + str(self.fk_playlist)
