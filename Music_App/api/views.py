@@ -5,7 +5,7 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-
+import datetime
 from .models import Songs, PlayList, Schedule, UserTimeZone
 from .serializers import SongSerializer, PlayListSerializer, SongsPlaylistSerializer, ScheduleSerializer
 from .serializers import UserTimeZoneSerializer
@@ -35,30 +35,17 @@ class TimeZoneView(APIView):
 
     def post(self, request):
         try:
-            UserTimeZone.objects.get(user=request.user)
-            return Response("Timezone Already set", status=status.HTTP_400_BAD_REQUEST)
-        except ObjectDoesNotExist:
             data = request.data['time_zone']
             if data in pytz.all_timezones_set:
-                obj = UserTimeZone.objects.create(time_zone=data, user=request.user)
-                serializer = UserTimeZoneSerializer(obj)
-                return Response(serializer.data, status=status.HTTP_201_CREATED)
-            return Response("Invalid Timezone", status=status.HTTP_400_BAD_REQUEST)
-        except Exception:
-            return Response("Provide Timezone", status=status.HTTP_400_BAD_REQUEST)
-
-    def patch(self, request):
-        try:
-            data = request.data['time_zone']
-            if data in pytz.all_timezones_set:
-                obj = UserTimeZone.objects.get(user=request.user)
-                obj.time_zone = data
-                obj.save(update_fields=['time_zone'])
+                try:
+                    obj = UserTimeZone.objects.get(user=request.user)
+                    obj.time_zone = data
+                    obj.save(update_fields=['time_zone'])
+                except ObjectDoesNotExist:
+                    obj = UserTimeZone.objects.create(time_zone=data, user=request.user)
                 serializer = UserTimeZoneSerializer(obj)
                 return Response(serializer.data, status=status.HTTP_200_OK)
             return Response("Invalid Timezone", status=status.HTTP_400_BAD_REQUEST)
-        except ObjectDoesNotExist:
-            return Response("Timezone not Created", status=status.HTTP_400_BAD_REQUEST)
         except Exception:
             return Response("Provide Timezone", status=status.HTTP_400_BAD_REQUEST)
 
@@ -107,9 +94,8 @@ class ScheduleView(APIView):
 
     def get(self, request):
         try:
-            obj = UserTimeZone.objects.get(user=request.user)
-            time_zone = obj.time_zone
-        except ObjectDoesNotExist:
+            time_zone = request.user.usertimezone.time_zone
+        except Exception:
             time_zone = settings.TIME_ZONE
         zone = pytz.timezone(time_zone)
         data_list = Schedule.objects.filter(fk_user=request.user)
@@ -117,7 +103,7 @@ class ScheduleView(APIView):
         for obj in data_list:
             my_obj_list.append({
                 "fk_playlist": obj.fk_playlist.playlist_name,
-                "scheduled_time": obj.scheduled_time.astimezone(zone)
+                "scheduled_time": obj.scheduled_time.astimezone(zone).strftime('%Y-%m-%dT%H:%M:%S')
             })
         return Response(my_obj_list, status=status.HTTP_200_OK)
 
@@ -125,9 +111,19 @@ class ScheduleView(APIView):
         try:
             serializer = ScheduleSerializer(data=request.data)
             if serializer.is_valid():
-                PlayList.objects.get(id=request.data['fk_playlist'], fk_user=request.user)
-                serializer.save(fk_user=request.user)
+                try:
+                    time_zone = request.user.usertimezone.time_zone
+                except Exception:
+                    time_zone = settings.TIME_ZONE
+                playlist_obj = PlayList.objects.get(id=request.data['fk_playlist'], fk_user=request.user)
+
+                datetime_obj = datetime.datetime.strptime(request.data['scheduled_time'], "%Y-%m-%dT%H:%M:%S")
+                date_time = datetime_obj.replace(tzinfo=pytz.timezone(time_zone))
+                # print(date_time)
+                Schedule.objects.create(fk_playlist=playlist_obj, scheduled_time=date_time, fk_user=request.user)
                 return Response(serializer.data, status=status.HTTP_201_CREATED)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         except ObjectDoesNotExist:
-            return Response("Forbidden",status.HTTP_403_FORBIDDEN)
+            return Response("Forbidden", status.HTTP_403_FORBIDDEN)
+        except ValueError:
+            return Response("Date Time does not match format \'%Y-%m-%d %H:%M:%S\'", status.HTTP_403_FORBIDDEN)

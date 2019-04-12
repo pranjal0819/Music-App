@@ -1,10 +1,10 @@
 from django.db import models
 from django.contrib.auth.models import User
-
+from django.conf import settings
 
 # Create your models here.
 class UserTimeZone(models.Model):
-    time_zone = models.CharField(max_length=30, default='UTC')
+    time_zone = models.CharField(max_length=30, default=settings.TIME_ZONE)
     user = models.OneToOneField(User, unique=True, on_delete=models.CASCADE)
 
     def __str__(self):
